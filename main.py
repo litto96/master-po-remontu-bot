@@ -1,17 +1,18 @@
 import os
 import json
 import datetime
+import asyncio
+import threading
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, ApplicationBuilder, CommandHandler,
     CallbackQueryHandler, MessageHandler, ContextTypes, filters
 )
-import asyncio
 
 # Flask-приложение
 app = Flask(__name__)
-telegram_app: Application = None  # будет инициализирован позже
+telegram_app: Application = None  # позже будет инициализирован
 
 # Файл с пользователями
 users_file = "data/users.json"
@@ -29,7 +30,7 @@ def save_users(users):
     with open(users_file, "w") as f:
         json.dump(users, f, indent=2)
 
-# Команда /start
+# Telegram: /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Базовый — 199 руб/мес", callback_data='tarif_199')],
@@ -44,7 +45,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# Выбор тарифа
+# Telegram: обработка тарифа
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -67,7 +68,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Пожалуйста, отправьте ваш точный адрес одним сообщением."
     )
 
-# Обработка адреса
+# Telegram: обработка адреса
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     users = load_users()
@@ -78,7 +79,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Напишите /start чтобы выбрать тариф.")
 
-# Webhook от Telegram
+# Flask: webhook от Telegram
 @app.route("/webhook", methods=["POST"])
 async def webhook():
     data = request.get_json()
@@ -87,22 +88,26 @@ async def webhook():
         await telegram_app.process_update(update)
     return "ok", 200
 
-# Инициализация Telegram
-@app.before_first_request
-def start_bot():
+# Асинхронный запуск Telegram-бота
+async def start_telegram():
     global telegram_app
-    loop = asyncio.get_event_loop()
+    telegram_app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
 
-    async def init_telegram():
-        global telegram_app
-        telegram_app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CallbackQueryHandler(button))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        telegram_app.add_handler(CommandHandler("start", start))
-        telegram_app.add_handler(CallbackQueryHandler(button))
-        telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    await telegram_app.initialize()
+    await telegram_app.bot.set_webhook(
+        f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook"
+    )
+    await telegram_app.start()
+    print("🤖 Бот успешно запущен!")
 
-        await telegram_app.initialize()
-        await telegram_app.bot.set_webhook(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook")
-        await telegram_app.start()
+# Запуск бота в отдельном потоке
+def start_bot_thread():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_telegram())
 
-    loop.create_task(init_telegram())
+threading.Thread(target=start_bot_thread).start()
