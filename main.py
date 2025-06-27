@@ -67,7 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Запуск бота
 def main():
-    app = ApplicationBuilder().token("1597117287:AAFKfS8zYbSxLACyoWGfkdm783CKTjXe3_0").build()
+    app = ApplicationBuilder().token("1597117287:AAHvKBTg1GwipdaJBIZrYdCa3RVCyVA-Eq4").build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
