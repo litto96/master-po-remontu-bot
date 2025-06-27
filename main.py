@@ -50,10 +50,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "subscribed_at": str(datetime.date.today())
     }
     save_users(users)
-    await query.edit_message_text(f"✅ Вы выбрали тариф: {tarif}
-
-Пожалуйста, отправьте ваш адрес одним сообщением.")
-
+    await query.edit_message_text(
+    f"✅ Вы выбрали тариф: {tarif}\n\n"
+    "Пожалуйста, отправьте ваш точный адрес одним сообщением."
+)
 # Сбор адреса
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
