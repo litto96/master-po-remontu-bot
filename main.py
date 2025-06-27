@@ -28,10 +28,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.
-
-Выберите тариф подписки:", reply_markup=reply_markup)
-
+    "👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.\n\n"
+    "Выберите тариф подписки:",
+    reply_markup=reply_markup
+)
 # Обработка выбора тарифа
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
