@@ -27,7 +27,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Связаться с мастером", url="https://t.me/T1m11333")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.
+    await update.message.reply_text(
+        "👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.
 
 Выберите тариф подписки:", reply_markup=reply_markup)
 
@@ -66,7 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Запуск бота
 def main():
-    app = ApplicationBuilder().token("YOUR_BOT_TOKEN_HERE").build()
+    app = ApplicationBuilder().token("1597117287:AAFKfS8zYbSxLACyoWGfkdm783CKTjXe3_0").build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
