@@ -9,10 +9,11 @@ from telegram.ext import (
 )
 import asyncio
 
-# Подготовка
+# Flask-приложение
 app = Flask(__name__)
-telegram_app: Application = None  # инициализируется позже
+telegram_app: Application = None  # будет инициализирован позже
 
+# Файл с пользователями
 users_file = "data/users.json"
 os.makedirs("data", exist_ok=True)
 
@@ -28,7 +29,7 @@ def save_users(users):
     with open(users_file, "w") as f:
         json.dump(users, f, indent=2)
 
-# Хэндлеры Telegram
+# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Базовый — 199 руб/мес", callback_data='tarif_199')],
@@ -43,6 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
+# Выбор тарифа
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -65,6 +67,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Пожалуйста, отправьте ваш точный адрес одним сообщением."
     )
 
+# Обработка адреса
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     users = load_users()
@@ -75,7 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Напишите /start чтобы выбрать тариф.")
 
-# Flask-обработчик Webhook
+# Webhook от Telegram
 @app.route("/webhook", methods=["POST"])
 async def webhook():
     data = request.get_json()
@@ -84,22 +87,22 @@ async def webhook():
         await telegram_app.process_update(update)
     return "ok", 200
 
-# Запуск Telegram и Flask
-async def run():
+# Инициализация Telegram
+@app.before_first_request
+def start_bot():
     global telegram_app
-    telegram_app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
-
-    telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(CallbackQueryHandler(button))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    await telegram_app.initialize()
-    await telegram_app.bot.set_webhook(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook")
-    await telegram_app.start()
-    print("🤖 Telegram bot started")
-
-# Flask старт
-if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.create_task(run())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
+    async def init_telegram():
+        global telegram_app
+        telegram_app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+
+        telegram_app.add_handler(CommandHandler("start", start))
+        telegram_app.add_handler(CallbackQueryHandler(button))
+        telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+        await telegram_app.initialize()
+        await telegram_app.bot.set_webhook(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook")
+        await telegram_app.start()
+
+    loop.create_task(init_telegram())
