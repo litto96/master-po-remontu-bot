@@ -1,9 +1,16 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+import os
 import json
 import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler,
+    CallbackQueryHandler, MessageHandler,
+    ContextTypes, filters
+)
 
+# Файл пользователей
 users_file = "data/users.json"
+os.makedirs("data", exist_ok=True)  # Создаём папку, если её нет
 
 # Загрузка пользователей
 def load_users():
@@ -18,21 +25,21 @@ def save_users(users):
     with open(users_file, "w") as f:
         json.dump(users, f, indent=2)
 
-# Обработка старта
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Базовый — 199 руб/мес", callback_data='tarif_199')],
         [InlineKeyboardButton("Стандарт — 299 руб/мес", callback_data='tarif_299')],
         [InlineKeyboardButton("Премиум — 399 руб/мес", callback_data='tarif_399')],
-        [InlineKeyboardButton("Связаться с мастером", url="https://t.me/T1m11333")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-    "👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.\n\n"
-    "Выберите тариф подписки:",
-    reply_markup=reply_markup
-)
-# Обработка выбора тарифа
+        "👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.\n\n"
+        "Выберите тариф подписки:",
+        reply_markup=reply_markup
+    )
+
+# Выбор тарифа
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -51,10 +58,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     save_users(users)
     await query.edit_message_text(
-    f"✅ Вы выбрали тариф: {tarif}\n\n"
-    "Пожалуйста, отправьте ваш точный адрес одним сообщением."
-)
-# Сбор адреса
+        f"✅ Вы выбрали тариф: {tarif}\n\n"
+        "Пожалуйста, отправьте ваш точный адрес одним сообщением."
+    )
+
+# Сохранение адреса
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     users = load_users()
@@ -65,13 +73,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Напишите /start чтобы выбрать тариф.")
 
-# Запуск бота
-def main():
-    app = ApplicationBuilder().token("1597117287:AAHvKBTg1GwipdaJBIZrYdCa3RVCyVA-Eq4").build()
+# WEBHOOK запуск
+async def main():
+    app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.run_polling()
 
+    await app.initialize()
+    await app.start()
+
+    # Webhook адрес от Render
+    webhook_url = f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook"
+    await app.bot.set_webhook(webhook_url)
+
+    await app.updater.start_webhook()
+    await app.updater.wait_until_closed()
+
+# Точка входа
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
