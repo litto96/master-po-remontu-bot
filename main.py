@@ -1,18 +1,22 @@
 import os
 import json
 import datetime
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler,
-    CallbackQueryHandler, MessageHandler,
-    ContextTypes, filters
+    Application, ApplicationBuilder, CommandHandler,
+    CallbackQueryHandler, MessageHandler, ContextTypes, filters
 )
+import asyncio
 
-# Файл пользователей
+# Подготовка
+app = Flask(__name__)
+telegram_app: Application = None  # инициализируется позже
+
 users_file = "data/users.json"
-os.makedirs("data", exist_ok=True)  # Создаём папку, если её нет
+os.makedirs("data", exist_ok=True)
 
-# Загрузка пользователей
+# Загрузка и сохранение пользователей
 def load_users():
     try:
         with open(users_file, "r") as f:
@@ -20,17 +24,17 @@ def load_users():
     except FileNotFoundError:
         return {}
 
-# Сохранение пользователей
 def save_users(users):
     with open(users_file, "w") as f:
         json.dump(users, f, indent=2)
 
-# /start
+# Хэндлеры Telegram
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Базовый — 199 руб/мес", callback_data='tarif_199')],
         [InlineKeyboardButton("Стандарт — 299 руб/мес", callback_data='tarif_299')],
         [InlineKeyboardButton("Премиум — 399 руб/мес", callback_data='tarif_399')],
+        [InlineKeyboardButton("Связаться с мастером", url="https://t.me/T1m11333")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
@@ -39,7 +43,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# Выбор тарифа
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -62,7 +65,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Пожалуйста, отправьте ваш точный адрес одним сообщением."
     )
 
-# Сохранение адреса
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
     users = load_users()
@@ -73,25 +75,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Напишите /start чтобы выбрать тариф.")
 
-# WEBHOOK запуск
-async def main():
-    app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+# Flask-обработчик Webhook
+@app.route("/webhook", methods=["POST"])
+async def webhook():
+    data = request.get_json()
+    if telegram_app:
+        update = Update.de_json(data, telegram_app.bot)
+        await telegram_app.process_update(update)
+    return "ok", 200
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# Запуск Telegram и Flask
+async def run():
+    global telegram_app
+    telegram_app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
 
-    await app.initialize()
-    await app.start()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CallbackQueryHandler(button))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Webhook адрес от Render
-    webhook_url = f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook"
-    await app.bot.set_webhook(webhook_url)
+    await telegram_app.initialize()
+    await telegram_app.bot.set_webhook(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}/webhook")
+    await telegram_app.start()
+    print("🤖 Telegram bot started")
 
-    await app.updater.start_webhook()
-    await app.updater.wait_until_closed()
-
-# Точка входа
+# Flask старт
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.create_task(run())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
