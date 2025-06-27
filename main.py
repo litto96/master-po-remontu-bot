@@ -81,8 +81,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Flask: webhook от Telegram
 @app.route("/webhook", methods=["POST"])
-async def webhook():
-    data = request.get_json()
+def webhook():
+    try:
+        data = request.get_json()
+        update = Update.de_json(data, telegram_app.bot)
+        asyncio.run(telegram_app.process_update(update))
+        return "ok", 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"Error: {str(e)}", 500
     if telegram_app:
         update = Update.de_json(data, telegram_app.bot)
         await telegram_app.process_update(update)
