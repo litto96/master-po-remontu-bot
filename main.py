@@ -1,13 +1,25 @@
 from flask import Flask, request
-from telegram import Update, Bot
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, ContextTypes, filters
 import os
 import json
 import datetime
 import asyncio
 
+# Ensure dependencies are installed with:
+# pip install python-telegram-bot==20.8 Flask==3.0.3 gunicorn
+
 app = Flask(__name__)
-bot = Bot(token=os.environ["BOT_TOKEN"])
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+if not BOT_TOKEN or not WEBHOOK_URL:
+    raise RuntimeError("BOT_TOKEN and WEBHOOK_URL must be set as environment variables.")
+
+# Telegram application
+application = Application.builder().token(BOT_TOKEN).build()
+bot = application.bot
 
 users_file = "data/users.json"
 
@@ -33,7 +45,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Связаться с мастером", url="https://t.me/T1m11333")]
     ]
     markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.\n\nВыберите тариф подписки:", reply_markup=markup)
+    await update.message.reply_text(
+        "👋 Привет! Я — мастер по ремонту бытовой техники из Новомосковска.\n\nВыберите тариф подписки:",
+        reply_markup=markup
+    )
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -52,7 +67,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "subscribed_at": str(datetime.date.today())
     }
     save_users(users)
-    await query.edit_message_text(f"✅ Вы выбрали тариф: {tarif}\n\nПожалуйста, отправьте ваш точный адрес одним сообщением.")
+    await query.edit_message_text(
+        f"✅ Вы выбрали тариф: {tarif}\n\nПожалуйста, отправьте ваш точный адрес одним сообщением."
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.message.from_user.id)
@@ -64,25 +81,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Напишите /start, чтобы выбрать тариф.")
 
-# Webhook обработчик
+# Обработка Webhook
 @app.route('/webhook', methods=['POST'])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot)
     asyncio.run(application.process_update(update))
     return 'ok'
 
-# Telegram application
-application = Application.builder().token(os.environ["BOT_TOKEN"]).build()
+@app.before_first_request
+def setup_webhook():
+    asyncio.run(bot.set_webhook(url=f"{WEBHOOK_URL}/webhook"))
+
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Установка webhook при запуске
-@app.before_request
-def setup_webhook():
-    webhook_url = os.environ["WEBHOOK_URL"]
-    asyncio.run(bot.set_webhook(url=webhook_url))
-
-# Gunicorn ищет переменную "app"
 if __name__ == "__main__":
     app.run(port=10000)
