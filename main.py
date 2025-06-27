@@ -85,6 +85,7 @@ def webhook():
     try:
         data = request.get_json()
         update = Update.de_json(data, telegram_app.bot)
+        # вместо await используем asyncio.run
         asyncio.run(telegram_app.process_update(update))
         return "ok", 200
     except Exception as e:
